@@ -8,6 +8,37 @@ from typing import Callable, Optional
 
 URL_PATTERN = re.compile(r"https?://[^\s]+", re.IGNORECASE)
 
+# Mapping of canonical card types to keywords that hint towards them.
+# Extend this dictionary to support new categories.
+CARD_TYPE_KEYWORD_MAP: dict[str, tuple[str, ...]] = {
+    "personal": ("personal",),
+    "business": ("business", "corporate", "company"),
+    "invitation": ("invitation", "invite"),
+}
+
+
+def infer_card_type_from_text(text: str) -> str | None:
+    """Infer card type keywords present in the given text."""
+
+    lowered = text.lower()
+    matches: list[tuple[int, str]] = []
+    for card_type, keywords in CARD_TYPE_KEYWORD_MAP.items():
+        for keyword in keywords:
+            index = lowered.find(keyword)
+            if index != -1:
+                matches.append((index, card_type))
+                break
+    if not matches:
+        return None
+    matches.sort(key=lambda item: item[0])
+    ordered_types: list[str] = []
+    for _, card_type in matches:
+        if card_type not in ordered_types:
+            ordered_types.append(card_type)
+    if len(ordered_types) == 1:
+        return ordered_types[0]
+    return " ".join(ordered_types)
+
 
 @dataclass(slots=True)
 class CardRequirements:
@@ -319,7 +350,15 @@ class RequirementManager:
         self._capture_urls(answer)
         if not self._active_question:
             return
-        self._active_question.apply_answer(self.requirements, answer)
+        question = self._active_question
+        question.apply_answer(self.requirements, answer)
+        self._auto_fill_from_answer(question, answer)
+
+    def _auto_fill_from_answer(self, question: Question, answer: str) -> None:
+        if question.id == "occasion" and not (self.requirements.card_type or "").strip():
+            inferred = infer_card_type_from_text(answer)
+            if inferred:
+                self.requirements.card_type = inferred
 
     def _capture_urls(self, message: str) -> None:
         urls = extract_urls(message)
