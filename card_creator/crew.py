@@ -132,11 +132,13 @@ class CardDesignCrew:
         raw_payload = getattr(crew_output, "raw", crew_output)
         raw_output = self._ensure_textual_payload(raw_payload)
         blueprint = self._safe_parse_json(raw_output)
+
         html_preview = (
             blueprint_to_html(blueprint)
             if isinstance(blueprint, dict)
             else None
         )
+
         return {
             "raw_output": raw_output,
             "blueprint": blueprint,
