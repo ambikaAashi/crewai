@@ -76,3 +76,60 @@ def test_safe_parse_json_ignores_preceding_text() -> None:
 def test_safe_parse_json_returns_none_when_absent() -> None:
     crew = _make_crew()
     assert CardDesignCrew._safe_parse_json(crew, "No JSON here") is None
+
+
+def test_generate_final_html_extracts_document_from_code_fence() -> None:
+    crew = _make_crew()
+
+    class DummyLLM:
+        def __init__(self) -> None:
+            self.prompts: list[str] = []
+
+        def call(self, message: str) -> str:
+            self.prompts.append(message)
+            return """```html
+<!DOCTYPE html>
+<html><body>Final design</body></html>
+```"""
+
+    dummy_llm = DummyLLM()
+    crew._llm = dummy_llm  # type: ignore[attr-defined]
+
+    html, raw = CardDesignCrew._generate_final_html(crew, "Please render")
+
+    assert dummy_llm.prompts == ["Please render"]
+    assert raw.strip().startswith("```html")
+    assert html is not None
+    assert "<body>Final design</body>" in html
+
+
+def test_generate_final_html_handles_errors_gracefully() -> None:
+    crew = _make_crew()
+
+    class FailingLLM:
+        def call(self, message: str) -> str:
+            raise RuntimeError("boom")
+
+    crew._llm = FailingLLM()  # type: ignore[attr-defined]
+
+    html, raw = CardDesignCrew._generate_final_html(crew, "ignored")
+
+    assert html is None
+    assert raw is None
+
+
+def test_extract_html_document_recovers_embedded_markup() -> None:
+    crew = _make_crew()
+    payload = "Here you go!\n<!DOCTYPE html>\n<html><body>Hi</body></html>\nThanks."
+
+    html = CardDesignCrew._extract_html_document(crew, payload)
+
+    assert html is not None
+    assert html.startswith("<!DOCTYPE html>")
+    assert html.endswith("</html>")
+
+
+def test_extract_html_document_returns_none_without_html() -> None:
+    crew = _make_crew()
+    assert CardDesignCrew._extract_html_document(crew, "Plain text only") is None
+

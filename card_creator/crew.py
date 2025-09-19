@@ -144,6 +144,11 @@ class CardDesignCrew:
             if isinstance(blueprint, dict)
             else None
         )
+        generated_html = None
+        generated_html_raw = None
+        if html_prompt:
+            generated_html, generated_html_raw = self._generate_final_html(html_prompt)
+
 
         return {
             "raw_output": raw_output,
@@ -151,6 +156,8 @@ class CardDesignCrew:
             "pexels_images": inspirations,
             "html_preview": html_preview,
             "html_generation_prompt": html_prompt,
+            "generated_html": generated_html,
+            "generated_html_raw": generated_html_raw,
         }
 
     def _ensure_textual_payload(self, payload: Any) -> str:
@@ -171,6 +178,114 @@ class CardDesignCrew:
         """Best-effort JSON parser that tolerates surrounding chatter."""
 
         if not payload:
+            return None
+
+        payload = payload.strip()
+        if not payload:
+            return None
+
+        for candidate in self._iter_json_candidates(payload):
+            try:
+                parsed = json.loads(candidate)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(parsed, dict):
+                return parsed
+        return None
+
+    def _iter_json_candidates(self, payload: str) -> list[str]:
+        """Collect potential JSON snippets contained within the payload."""
+
+        candidates: list[str] = []
+
+        def collect_segment(start_char: str, end_char: str) -> None:
+            start = payload.find(start_char)
+            while start != -1:
+                segment = self._extract_balanced_segment(payload, start, start_char, end_char)
+                if segment:
+                    candidates.append(segment)
+                    return
+                start = payload.find(start_char, start + 1)
+
+        collect_segment("{", "}")
+        collect_segment("[", "]")
+
+        if not candidates:
+            candidates.append(payload)
+
+        return candidates
+
+    def _generate_final_html(self, prompt: str) -> tuple[str | None, str | None]:
+        """Call the configured LLM to turn the prompt into production HTML."""
+
+        if not prompt:
+            return None, None
+
+        try:
+            response = self._llm.call(prompt)
+        except Exception:  # pragma: no cover - LLM errors handled gracefully
+            return None, None
+
+        raw_output = self._ensure_textual_payload(response)
+        if not raw_output.strip():
+            return None, raw_output
+
+        html = self._extract_html_document(raw_output)
+        return html, raw_output
+
+    def _extract_html_document(self, payload: str) -> str | None:
+        """Best-effort extractor for a complete HTML document in ``payload``."""
+
+        if not payload:
+            return None
+
+        text = payload.strip()
+        if not text:
+            return None
+
+        if text.startswith("```"):
+            text = self._strip_code_fences(text)
+            if not text:
+                return None
+
+        lower = text.lower()
+        doc_start = lower.find("<!doctype")
+        html_start = lower.find("<html")
+
+        start_index: int | None = None
+        if doc_start != -1 and html_start != -1:
+            start_index = min(doc_start, html_start)
+        elif doc_start != -1:
+            start_index = doc_start
+        elif html_start != -1:
+            start_index = html_start
+
+        if start_index is None:
+            return None
+
+        end_index = lower.rfind("</html>")
+        if end_index != -1:
+            end_index += len("</html>")
+            return text[start_index:end_index].strip()
+
+        if start_index == 0:
+            return text
+
+        return text[start_index:].strip() if "</html" in lower[start_index:] else None
+
+    @staticmethod
+    def _strip_code_fences(text: str) -> str:
+        lines = text.splitlines()
+        if not lines:
+            return ""
+
+        if lines[0].strip().startswith("```"):
+            lines = lines[1:]
+
+        while lines and lines[-1].strip().startswith("```"):
+            lines = lines[:-1]
+
+        return "\n".join(lines).strip()
             return None
 
         payload = payload.strip()
