@@ -33,7 +33,10 @@ def blueprint_to_html(
     background_plan = _text(visual_direction.get("background_image_plan"))
 
     image_assets = blueprint.get("image_assets") or {}
+    must_use_images = _collect_image_urls(image_assets.get("must_use"))
+    pexels_images = _collect_image_urls(image_assets.get("pexels_options"))
     background_image = _select_background_image(image_assets)
+    image_sections = _render_image_sections(must_use_images, pexels_images)
 
     production_notes = _as_list(blueprint.get("production_notes"))
     next_questions = _as_list(blueprint.get("next_questions"))
@@ -190,6 +193,9 @@ def blueprint_to_html(
       margin-top: 0;
       font-size: 1.25rem;
     }}
+    .details h3 {{
+      margin-top: 1.5rem;
+    }}
     .palette {{
       list-style: none;
       padding: 0;
@@ -227,6 +233,43 @@ def blueprint_to_html(
     .meta li {{
       margin-bottom: 0.5rem;
     }}
+    .images {{
+      display: grid;
+      gap: 1.25rem;
+    }}
+    .images__group h4 {{
+      margin: 0 0 0.5rem 0;
+      font-size: 1rem;
+      color: #1f2933;
+    }}
+    .images__grid {{
+      display: grid;
+      gap: 0.75rem;
+      grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    }}
+    .images__item {{
+      display: block;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 6px 14px rgba(15, 23, 42, 0.12);
+      border: 1px solid rgba(15, 23, 42, 0.06);
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }}
+    .images__item:hover {{
+      transform: translateY(-2px);
+      box-shadow: 0 12px 24px rgba(15, 23, 42, 0.18);
+    }}
+    .images__thumb {{
+      width: 100%;
+      aspect-ratio: 1;
+      object-fit: cover;
+      display: block;
+    }}
+    .images__placeholder {{
+      margin: 0;
+      color: #6b7280;
+      font-size: 0.95rem;
+    }}
     footer {{
       margin-top: 2rem;
       font-size: 0.85rem;
@@ -252,6 +295,8 @@ def blueprint_to_html(
       <h3>Palette</h3>
       <ul class=\"palette\">{palette_markup}</ul>
       {meta_block}
+      <h3>Image Assets</h3>
+      <div class=\"images\">{image_sections}</div>
       <h3>Production Notes</h3>
       <ul>{production_markup}</ul>
       <h3>Open Questions</h3>
@@ -309,12 +354,14 @@ def _first_image_url(candidate: Any) -> str | None:
     if candidate is None:
         return None
     if isinstance(candidate, str):
-        return candidate.strip() or None
+        return _normalise_url(candidate)
     if isinstance(candidate, Mapping):
         for key in ("image_url", "url", "src"):
             value = candidate.get(key)
-            if isinstance(value, str) and value.strip():
-                return value.strip()
+            if isinstance(value, str):
+                normalised = _normalise_url(value)
+                if normalised:
+                    return normalised
         return None
     if isinstance(candidate, Sequence) and not isinstance(candidate, (str, bytes, bytearray)):
         for item in candidate:
@@ -322,6 +369,79 @@ def _first_image_url(candidate: Any) -> str | None:
             if url:
                 return url
     return None
+
+
+def _collect_image_urls(candidate: Any) -> list[str]:
+    urls: list[str] = []
+    seen: set[str] = set()
+
+    def _append(url: str | None) -> None:
+        if url and url not in seen:
+            urls.append(url)
+            seen.add(url)
+
+    if candidate is None:
+        return urls
+
+    if isinstance(candidate, str):
+        _append(_normalise_url(candidate))
+        return urls
+
+    if isinstance(candidate, Mapping):
+        for key in ("image_url", "url", "src"):
+            value = candidate.get(key)
+            if isinstance(value, str):
+                _append(_normalise_url(value))
+        return urls
+
+    if isinstance(candidate, Sequence) and not isinstance(candidate, (str, bytes, bytearray)):
+        for item in candidate:
+            for url in _collect_image_urls(item):
+                _append(url)
+        return urls
+
+    _append(_normalise_url(str(candidate)))
+    return urls
+
+
+def _normalise_url(value: str) -> str | None:
+    stripped = value.strip()
+    if not stripped:
+        return None
+    # remove any whitespace characters sprinkled throughout the URL so that
+    # accidental newlines or spaces from language model outputs do not break
+    # the rendered preview.
+    collapsed = "".join(stripped.split())
+    return collapsed or None
+
+
+def _render_image_sections(must_use: Sequence[str], pexels: Sequence[str]) -> str:
+    sections = [
+        _render_image_group("User provided images", must_use, "No user provided images."),
+        _render_image_group("Pexels inspirations", pexels, "No Pexels inspirations."),
+    ]
+    return "".join(sections)
+
+
+def _render_image_group(title: str, urls: Sequence[str], empty_message: str) -> str:
+    heading = f"<h4>{escape(title)}</h4>"
+    if not urls:
+        return (
+            f"<section class=\"images__group\">{heading}<p class=\"images__placeholder\">"
+            f"{escape(empty_message)}</p></section>"
+        )
+
+    items = "".join(_render_image_item(url, title) for url in urls)
+    return f"<section class=\"images__group\">{heading}<div class=\"images__grid\">{items}</div></section>"
+
+
+def _render_image_item(url: str, title: str) -> str:
+    safe_url = escape(url, quote=True)
+    alt = escape(f"{title} preview", quote=True)
+    return (
+        f"<a class=\"images__item\" href=\"{safe_url}\" target=\"_blank\" rel=\"noopener noreferrer\">"
+        f"<img class=\"images__thumb\" src=\"{safe_url}\" alt=\"{alt}\" loading=\"lazy\" /></a>"
+    )
 
 
 __all__ = ["blueprint_to_html"]

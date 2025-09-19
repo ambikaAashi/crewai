@@ -53,3 +53,20 @@ def test_blueprint_to_html_handles_missing_sections() -> None:
     assert "Simple Hello" in html
     assert "No production notes provided" in html
     assert "No outstanding questions" in html
+
+
+def test_blueprint_to_html_cleans_image_urls() -> None:
+    messy_url = "https://example.com/assets/IMG-20240416-WA000\n9-e1747995653537-300x300.jpg"
+    blueprint = {
+        "image_assets": {
+            "must_use": [messy_url],
+            "pexels_options": [
+                {"image_url": " https://images.example/pexels-photo-3873490.jpeg?auto=c\nompress "}
+            ],
+        }
+    }
+
+    html = blueprint_to_html(blueprint)
+
+    assert "https://example.com/assets/IMG-20240416-WA0009-e1747995653537-300x300.jpg" in html
+    assert "https://images.example/pexels-photo-3873490.jpeg?auto=compress" in html
