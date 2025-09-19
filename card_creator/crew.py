@@ -10,6 +10,7 @@ from crewai import Agent, Crew, Process, Task
 from crewai.llm import LLM
 
 from .config import Settings
+from .html_renderer import blueprint_to_html
 from .pexels import PexelsPhoto, search_backgrounds
 from .requirements import CardRequirements
 
@@ -127,13 +128,35 @@ class CardDesignCrew:
             verbose=False,
         )
 
-        result = crew.run()
-        blueprint = self._safe_parse_json(result)
+        crew_output = crew.kickoff()
+        raw_payload = getattr(crew_output, "raw", crew_output)
+        raw_output = self._ensure_textual_payload(raw_payload)
+        blueprint = self._safe_parse_json(raw_output)
+        html_preview = (
+            blueprint_to_html(blueprint)
+            if isinstance(blueprint, dict)
+            else None
+        )
         return {
-            "raw_output": result,
+            "raw_output": raw_output,
             "blueprint": blueprint,
             "pexels_images": inspirations,
+            "html_preview": html_preview,
         }
+
+    def _ensure_textual_payload(self, payload: Any) -> str:
+        if payload is None:
+            return ""
+        if isinstance(payload, str):
+            return payload
+        if isinstance(payload, (bytes, bytearray)):
+            return payload.decode("utf-8", errors="replace")
+        if isinstance(payload, (dict, list)):
+            try:
+                return json.dumps(payload)
+            except (TypeError, ValueError):
+                return str(payload)
+        return str(payload)
 
     def _safe_parse_json(self, payload: str) -> dict[str, Any] | None:
         try:
