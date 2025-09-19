@@ -132,3 +132,4 @@ def test_extract_html_document_recovers_embedded_markup() -> None:
 def test_extract_html_document_returns_none_without_html() -> None:
     crew = _make_crew()
     assert CardDesignCrew._extract_html_document(crew, "Plain text only") is None
+

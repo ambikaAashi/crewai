@@ -149,6 +149,7 @@ class CardDesignCrew:
         if html_prompt:
             generated_html, generated_html_raw = self._generate_final_html(html_prompt)
 
+
         return {
             "raw_output": raw_output,
             "blueprint": blueprint,
@@ -285,6 +286,42 @@ class CardDesignCrew:
             lines = lines[:-1]
 
         return "\n".join(lines).strip()
+            return None
+
+        payload = payload.strip()
+        if not payload:
+            return None
+
+        for candidate in self._iter_json_candidates(payload):
+            try:
+                parsed = json.loads(candidate)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(parsed, dict):
+                return parsed
+        return None
+
+    def _iter_json_candidates(self, payload: str) -> list[str]:
+        """Collect potential JSON snippets contained within the payload."""
+
+        candidates: list[str] = []
+
+        def collect_segment(start_char: str, end_char: str) -> None:
+            start = payload.find(start_char)
+            while start != -1:
+                segment = self._extract_balanced_segment(payload, start, start_char, end_char)
+                if segment:
+                    candidates.append(segment)
+                    return
+                start = payload.find(start_char, start + 1)
+
+        collect_segment("{", "}")
+        collect_segment("[", "]")
+
+        if not candidates:
+            candidates.append(payload)
+
+        return candidates
 
     @staticmethod
     def _extract_balanced_segment(message: str, start: int, opener: str, closer: str) -> str | None:
