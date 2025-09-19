@@ -77,6 +77,14 @@ def chat() -> None:
         console.print("\n[bold yellow]LLM se JSON parse nahi ho paya. Raw response neeche diya gaya hai:[/bold yellow]")
         console.print(result.get("raw_output"))
 
+    html_preview = result.get("html_preview")
+    if html_preview:
+        console.print("\n[bold]HTML Preview:[/bold]")
+        console.print(html_preview)
+        console.print(
+            "\nIs HTML ko copy karke kisi .html file mein save karein aur browser mein khol kar card dekh sakte hain."
+        )
+
     inspirations = result.get("pexels_images", [])
     if inspirations:
         console.print("\n[bold]Inspiring backgrounds from Pexels:[/bold]")
