@@ -12,6 +12,7 @@ from crewai.llm import LLM
 from .config import Settings
 from .html_renderer import blueprint_to_html
 from .pexels import PexelsPhoto, search_backgrounds
+from .prompts import build_card_html_prompt
 from .requirements import CardRequirements
 
 
@@ -138,12 +139,18 @@ class CardDesignCrew:
             if isinstance(blueprint, dict)
             else None
         )
+        html_prompt = (
+            build_card_html_prompt(blueprint)
+            if isinstance(blueprint, dict)
+            else None
+        )
 
         return {
             "raw_output": raw_output,
             "blueprint": blueprint,
             "pexels_images": inspirations,
             "html_preview": html_preview,
+            "html_generation_prompt": html_prompt,
         }
 
     def _ensure_textual_payload(self, payload: Any) -> str:
@@ -161,10 +168,76 @@ class CardDesignCrew:
         return str(payload)
 
     def _safe_parse_json(self, payload: str) -> dict[str, Any] | None:
-        try:
-            return json.loads(payload)
-        except (TypeError, json.JSONDecodeError):
+        """Best-effort JSON parser that tolerates surrounding chatter."""
+
+        if not payload:
             return None
+
+        payload = payload.strip()
+        if not payload:
+            return None
+
+        for candidate in self._iter_json_candidates(payload):
+            try:
+                parsed = json.loads(candidate)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(parsed, dict):
+                return parsed
+        return None
+
+    def _iter_json_candidates(self, payload: str) -> list[str]:
+        """Collect potential JSON snippets contained within the payload."""
+
+        candidates: list[str] = []
+
+        def collect_segment(start_char: str, end_char: str) -> None:
+            start = payload.find(start_char)
+            while start != -1:
+                segment = self._extract_balanced_segment(payload, start, start_char, end_char)
+                if segment:
+                    candidates.append(segment)
+                    return
+                start = payload.find(start_char, start + 1)
+
+        collect_segment("{", "}")
+        collect_segment("[", "]")
+
+        if not candidates:
+            candidates.append(payload)
+
+        return candidates
+
+    @staticmethod
+    def _extract_balanced_segment(message: str, start: int, opener: str, closer: str) -> str | None:
+        """Return the smallest substring with balanced braces starting at ``start``."""
+
+        depth = 0
+        in_string = False
+        escape = False
+        for index in range(start, len(message)):
+            char = message[index]
+            if in_string:
+                if escape:
+                    escape = False
+                elif char == "\\":
+                    escape = True
+                elif char == '"':
+                    in_string = False
+                continue
+
+            if char == '"':
+                in_string = True
+                continue
+
+            if char == opener:
+                depth += 1
+            elif char == closer:
+                depth -= 1
+                if depth == 0:
+                    return message[start : index + 1]
+
+        return None
 
 
 __all__ = ["CardDesignCrew"]

@@ -85,6 +85,14 @@ def chat() -> None:
             "\nIs HTML ko copy karke kisi .html file mein save karein aur browser mein khol kar card dekh sakte hain."
         )
 
+    html_prompt = result.get("html_generation_prompt")
+    if html_prompt:
+        console.print("\n[bold]OpenAI/LLM HTML prompt:[/bold]")
+        console.print(html_prompt)
+        console.print(
+            "\nIs prompt ko ChatGPT ya kisi bhi code-generation model mein paste karke bespoke card HTML banwa sakte hain."
+        )
+
     inspirations = result.get("pexels_images", [])
     if inspirations:
         console.print("\n[bold]Inspiring backgrounds from Pexels:[/bold]")

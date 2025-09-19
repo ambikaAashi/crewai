@@ -24,6 +24,21 @@ def test_requirement_manager_collects_core_fields():
     assert not manager.requirements.required_fields_missing()
 
 
+def test_card_type_inferred_from_occasion_answer():
+    manager = RequirementManager()
+    assert "occasion" in manager.next_question().lower()
+
+    manager.ingest_answer("Personal invitation card for office team")
+
+    assert manager.requirements.card_type == "personal invitation"
+
+    next_prompt = manager.next_question()
+    assert "size" in next_prompt.lower()
+
+    # Ensure we have already skipped the explicit card type question
+    assert "personal card" not in next_prompt.lower()
+
+
 def test_urls_are_extracted_and_stored():
     manager = RequirementManager()
     manager.next_question()
