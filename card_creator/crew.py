@@ -12,6 +12,7 @@ from crewai.llm import LLM
 from .config import Settings
 from .html_renderer import blueprint_to_html
 from .pexels import PexelsPhoto, search_backgrounds
+from .prompts import build_card_html_prompt
 from .requirements import CardRequirements
 
 
@@ -138,12 +139,18 @@ class CardDesignCrew:
             if isinstance(blueprint, dict)
             else None
         )
+        html_prompt = (
+            build_card_html_prompt(blueprint)
+            if isinstance(blueprint, dict)
+            else None
+        )
 
         return {
             "raw_output": raw_output,
             "blueprint": blueprint,
             "pexels_images": inspirations,
             "html_preview": html_preview,
+            "html_generation_prompt": html_prompt,
         }
 
     def _ensure_textual_payload(self, payload: Any) -> str:
