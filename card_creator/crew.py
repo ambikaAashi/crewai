@@ -127,13 +127,29 @@ class CardDesignCrew:
             verbose=False,
         )
 
-        result = crew.run()
-        blueprint = self._safe_parse_json(result)
+        crew_output = crew.kickoff()
+        raw_payload = getattr(crew_output, "raw", crew_output)
+        raw_output = self._ensure_textual_payload(raw_payload)
+        blueprint = self._safe_parse_json(raw_output)
         return {
-            "raw_output": result,
+            "raw_output": raw_output,
             "blueprint": blueprint,
             "pexels_images": inspirations,
         }
+
+    def _ensure_textual_payload(self, payload: Any) -> str:
+        if payload is None:
+            return ""
+        if isinstance(payload, str):
+            return payload
+        if isinstance(payload, (bytes, bytearray)):
+            return payload.decode("utf-8", errors="replace")
+        if isinstance(payload, (dict, list)):
+            try:
+                return json.dumps(payload)
+            except (TypeError, ValueError):
+                return str(payload)
+        return str(payload)
 
     def _safe_parse_json(self, payload: str) -> dict[str, Any] | None:
         try:
